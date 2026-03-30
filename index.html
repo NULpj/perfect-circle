@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Perfect Circle Challenge</title>
+
+<style>
+:root {
+  --bg: #0f172a;
+  --card: #1e293b;
+  --accent: #22c55e;
+  --text: #e2e8f0;
+  --muted: #94a3b8;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: system-ui;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+}
+
+.container {
+  width: 100%;
+  max-width: 420px;
+  text-align: center;
+}
+
+h1 {
+  margin-bottom: 10px;
+}
+
+.card {
+  background: var(--card);
+  padding: 20px;
+  border-radius: 20px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+
+canvas {
+  width: 100%;
+  height: 300px;
+  background: #020617;
+  border-radius: 12px;
+  cursor: crosshair;
+}
+
+.score {
+  font-size: 2rem;
+  margin: 10px 0;
+}
+
+.highscore {
+  color: var(--muted);
+}
+
+button {
+  margin-top: 10px;
+  padding: 10px 15px;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.primary {
+  background: var(--accent);
+  color: black;
+}
+
+.secondary {
+  background: #334155;
+  color: white;
+}
+
+.hidden {
+  display: none;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+  <h1>Perfect Circle</h1>
+
+  <div class="card">
+    <canvas id="canvas"></canvas>
+
+    <div class="score" id="score">Draw a circle!</div>
+    <div class="highscore" id="highscore">High Score: 0%</div>
+
+    <button class="primary hidden" id="shareBtn">Share Result</button>
+    <button class="secondary" id="resetBtn">Try Again</button>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+let drawing = false;
+let points = [];
+
+function resizeCanvas() {
+  canvas.width = canvas.clientWidth;
+  canvas.height = canvas.clientHeight;
+}
+resizeCanvas();
+window.addEventListener("resize", resizeCanvas);
+
+// === DRAWING ===
+function startDraw(e) {
+  drawing = true;
+  points = [];
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+}
+
+function draw(e) {
+  if (!drawing) return;
+
+  const rect = canvas.getBoundingClientRect();
+  const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+  const y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+
+  points.push({x,y});
+
+  ctx.lineWidth = 3;
+  ctx.lineCap = "round";
+  ctx.strokeStyle = "#22c55e";
+
+  ctx.beginPath();
+  if (points.length > 1) {
+    ctx.moveTo(points[points.length-2].x, points[points.length-2].y);
+    ctx.lineTo(x,y);
+    ctx.stroke();
+  }
+}
+
+function endDraw() {
+  if (!drawing) return;
+  drawing = false;
+
+  if (points.length < 10) return;
+
+  const score = calculateScore(points);
+  showScore(score);
+}
+
+// === SCORE ALGORITHM ===
+function calculateScore(points) {
+  // center (average)
+  let cx = 0, cy = 0;
+  points.forEach(p => {
+    cx += p.x;
+    cy += p.y;
+  });
+  cx /= points.length;
+  cy /= points.length;
+
+  // radius average
+  const distances = points.map(p => Math.hypot(p.x - cx, p.y - cy));
+  const avgRadius = distances.reduce((a,b)=>a+b)/distances.length;
+
+  // deviation
+  const variance = distances.reduce((sum,d)=> sum + Math.pow(d - avgRadius,2),0) / distances.length;
+  const stdDev = Math.sqrt(variance);
+
+  // convert to score
+  let score = Math.max(0, 100 - (stdDev / avgRadius) * 100);
+  return score;
+}
+
+// === UI ===
+const scoreEl = document.getElementById("score");
+const highscoreEl = document.getElementById("highscore");
+const shareBtn = document.getElementById("shareBtn");
+
+let highScore = localStorage.getItem("circleHighScore") || 0;
+highscoreEl.innerText = "High Score: " + Number(highScore).toFixed(2) + "%";
+
+function showScore(score) {
+  scoreEl.innerText = score.toFixed(2) + "%";
+
+  if (score > highScore) {
+    highScore = score;
+    localStorage.setItem("circleHighScore", score);
+
+    highscoreEl.innerText = "High Score: " + score.toFixed(2) + "%";
+    shareBtn.classList.remove("hidden");
+
+  } else {
+    shareBtn.classList.add("hidden");
+  }
+
+  setTimeout(resetCanvas, 2500);
+}
+
+// === SHARE ===
+shareBtn.addEventListener("click", async () => {
+  const text = `Aku dapat ${highScore.toFixed(2)}% di Perfect Circle Challenge! Bisa kalahin?`;
+
+  if (navigator.share) {
+    await navigator.share({
+      title: "Perfect Circle",
+      text
+    });
+  } else {
+    alert("Web Share tidak didukung di browser ini");
+  }
+});
+
+// === RESET ===
+function resetCanvas() {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  scoreEl.innerText = "Draw a circle!";
+  shareBtn.classList.add("hidden");
+}
+
+document.getElementById("resetBtn").addEventListener("click", resetCanvas);
+
+// === EVENTS ===
+canvas.addEventListener("mousedown", startDraw);
+canvas.addEventListener("mousemove", draw);
+canvas.addEventListener("mouseup", endDraw);
+
+canvas.addEventListener("touchstart", startDraw);
+canvas.addEventListener("touchmove", draw);
+canvas.addEventListener("touchend", endDraw);
+
+</script>
+
+</body>
+</html>
